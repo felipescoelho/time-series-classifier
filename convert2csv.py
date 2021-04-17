@@ -70,7 +70,7 @@ if __name__ == '__main__':
         CLEAR_FILE = open(PROPERTIES_PATH, 'w')
         CLEAR_FILE.close()
 
-    for g_idx in range(LABELS_TRAIN.shape[0]):
+    for g_idx in range(1, LABELS_TRAIN.shape[0]+1):
         G = series2graph(TIMESERIES_TRAIN.iloc[0, 0:])
 
         with open(EDGE_LIST_PATH, 'a') as file:
