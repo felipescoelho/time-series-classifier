@@ -1,17 +1,31 @@
-"""SyntheticDataset Class"""
+"""
+Train a GNN for Graph classification.
+
+Luiz Felipe da Silveira Coelho - luizfelipe.coelho@smt.ufrj.br
+apr 18, 2021
+"""
 
 import pandas as pd
 import dgl
-from dgl import DGLDataset
+import torch
+import torch.nn as nn
+import torch.nn.functional as F
+from dgl.data import DGLDataset
+from dgl.nn import GraphConv
 
 
 class SyntheticDataset(DGLDataset):
+    """
+    Synthetic dataset generated from my edge list and properties list.
+    """
+
     def __init__(self):
         super().__init__(name='synthetic')
 
     def process(self):
+        """Process .csv files."""
         edges = pd.read_csv('./data_set/edge_list.csv')
-        properties = pd.read_csv('./graph_properties.csv')
+        properties = pd.read_csv('./data_set/properties.csv')
         self.graphs = []
         self.labels = []
 
@@ -52,3 +66,10 @@ class SyntheticDataset(DGLDataset):
 
     def __len__(self):
         return len(self.graphs)
+
+
+if __name__ == '__main__':
+    # Load the synthetic dataset:
+    DATASET = SyntheticDataset()
+    print('Node feature dimmensionality: ', DATASET.dim_nfeats)
+    print('Number of graph categories: ', DATASET.gclasses)

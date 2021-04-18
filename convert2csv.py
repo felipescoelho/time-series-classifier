@@ -1,5 +1,5 @@
 """
-Create a .csv file containing the necessary information to create a
+Creates a .csv file containing the necessary information to create a
 "Synthetic Dataset" to work with Deep Graph Library.
 
 Specifications:
@@ -7,20 +7,22 @@ Must create 2 files:
 edge_list.csv: 3-cloumn .csv file, where the first column indicates the
                Graph, the second the source node and the third the
                destionation.
+               . header=['graph_id', 'src', 'dst']
 
 properties.csv: 3-column .csv file, where the first column indicates
                 the Graph, the second the labels and the third
                 the number of nodes
-
+                . header=['graph_id', 'label', 'num_nodes']
 
 Luiz Felipe da Silveira COelho - luizfelipe.coelho@smt.ufrj.br
 apr 14, 2021
 """
 
 import os
+import csv
 import pandas as pd
-import matplotlib.pyplot as plt
 import networkx as nx
+from tqdm import tqdm
 
 
 def series2graph(timeseries):
@@ -49,6 +51,8 @@ if __name__ == '__main__':
     TEST_FILE = 'FordA_TEST.tsv'
     EDGE_LIST_PATH = PATH_FOLDER+'/'+'edge_list.csv'
     PROPERTIES_PATH = PATH_FOLDER+'/'+'properties.csv'
+    EDGE_LIST_HEADER = ('graph_id', 'src', 'dst')
+    PROPERTIES_HEADER = ('graph_id', 'label', 'num_nodes')
 
     if not os.path.isdir(PATH_FOLDER):
         try:
@@ -61,27 +65,29 @@ if __name__ == '__main__':
     DF = pd.read_csv(DATA_FOLDER+TRAIN_FILE, sep='\t', header=None)
     LABELS_TRAIN = DF[0]
     TIMESERIES_TRAIN = DF.iloc[0:, 1:]
+    TOOLBAR_WIDTH = LABELS_TRAIN.shape[0]  # Progress bar
 
-    if os.path.isfile(EDGE_LIST_PATH):
-        CLEAR_FILE = open(EDGE_LIST_PATH, 'w')
-        CLEAR_FILE.close()
+    with open(EDGE_LIST_PATH, 'w', newline='') as csvfile:
+        HEADER_WRITER = csv.writer(csvfile, delimiter=',')
+        HEADER_WRITER.writerow(EDGE_LIST_HEADER)
 
-    if os.path.isfile(PROPERTIES_PATH):
-        CLEAR_FILE = open(PROPERTIES_PATH, 'w')
-        CLEAR_FILE.close()
+    with open(PROPERTIES_PATH, 'w', newline='') as csvfile:
+        HEADER_WRITER = csv.writer(csvfile, delimiter=',')
+        HEADER_WRITER.writerow(PROPERTIES_HEADER)
 
-    for g_idx in range(1, LABELS_TRAIN.shape[0]+1):
+    for g_idx in tqdm(range(1, LABELS_TRAIN.shape[0]+1)):
         G = series2graph(TIMESERIES_TRAIN.iloc[0, 0:])
 
-        with open(EDGE_LIST_PATH, 'a') as file:
+        with open(EDGE_LIST_PATH, 'a') as csvfile:
             for node in G.nodes():
                 for edge in G.edges([node]):
-                    file.write(str(g_idx)+', '+str(edge)[1:-1]+'\n')
+                    src, dst = edge
+                    LINE_WRITER = csv.writer(csvfile, delimiter=',')
+                    LINE_WRITER.writerow([g_idx, src, dst])
 
-        with open(PROPERTIES_PATH, 'a') as file:
-            file.write(str(g_idx)+', '+str(LABELS_TRAIN[g_idx-1])+', 500\n')
+        with open(PROPERTIES_PATH, 'a') as csvfile:
+            LINE_WRITER = csv.writer(csvfile, delimiter=',')
+            LINE_WRITER.writerow([g_idx, LABELS_TRAIN[g_idx-1], 500])
 
-    plt.figure()
-    plt.subplot(111)
-    nx.draw(G, with_labels=True)
-    plt.show()
+
+# EoF
