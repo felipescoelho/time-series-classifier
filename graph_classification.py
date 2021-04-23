@@ -90,8 +90,6 @@ class GCN(nn.Module):
 if __name__ == '__main__':
     # Load the synthetic dataset:
     DATASET = SyntheticDataset()
-    print('Node feature dimmensionality: ', DATASET.dim_nfeats)
-    print('Number of graph categories: ', DATASET.gclasses)
 
     # Define data loader:
     NUM_EXAMPLES = len(DATASET)
@@ -104,7 +102,6 @@ if __name__ == '__main__':
                                        batch_size=5, drop_last=False)
     TEST_DATALOADER = GraphDataLoader(DATASET, sampler=TEST_SAMPLER,
                                       batch_size=5, drop_last=False)
-
     MODEL = GCN(DATASET.dim_nfeats, 16, DATASET.gclasses)
     OPTIMIZER = torch.optim.Adam(MODEL.parameters(), lr=0.01)
 

@@ -3,5 +3,6 @@ raw.githubusercontent.com/*
 articles/*
 images/*
 data_set/*
+__pycache__/*
 
 coe771.zip

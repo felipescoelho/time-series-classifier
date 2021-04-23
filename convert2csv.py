@@ -29,17 +29,19 @@ def series2graph(timeseries):
     """Transforms a time series into a graph."""
     node_no = timeseries.shape[-1]  # Number of nodes in a graph
     graph = nx.Graph()
-    graph.add_nodes_from(range(1, node_no+1), color='blue')
+    graph.add_nodes_from(range(1, node_no+1))
     for i in range(1, node_no+1):
         for j in range(i+1, node_no+1):
-            if j > i+1:
+            if j == i+1:
+                graph.add_edge(i, j)
+            else:
                 for k in range(i+1, j):
                     right_side = timeseries[j] + (timeseries[i]-timeseries[j])*((j-k)/(j-i))
                     visible = timeseries[k] < right_side
                     if not visible:
                         break
                 if visible:
-                    graph.add_edge(i, j, color='red')
+                    graph.add_edge(i, j)
     return graph
 
 
@@ -63,9 +65,8 @@ if __name__ == '__main__':
             print('Successfully created the directory '+PATH_FOLDER+'.')
 
     DF = pd.read_csv(DATA_FOLDER+TRAIN_FILE, sep='\t', header=None)
-    LABELS_TRAIN = DF[0]
+    LABELS_TRAIN = DF[0].replace(-1, 0)
     TIMESERIES_TRAIN = DF.iloc[0:, 1:]
-    TOOLBAR_WIDTH = LABELS_TRAIN.shape[0]  # Progress bar
 
     with open(EDGE_LIST_PATH, 'w', newline='') as csvfile:
         HEADER_WRITER = csv.writer(csvfile, delimiter=',')
@@ -76,7 +77,7 @@ if __name__ == '__main__':
         HEADER_WRITER.writerow(PROPERTIES_HEADER)
 
     for g_idx in tqdm(range(1, LABELS_TRAIN.shape[0]+1)):
-        G = series2graph(TIMESERIES_TRAIN.iloc[0, 0:])
+        G = series2graph(TIMESERIES_TRAIN.iloc[g_idx, 0:])
 
         with open(EDGE_LIST_PATH, 'a') as csvfile:
             for node in G.nodes():
