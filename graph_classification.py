@@ -15,6 +15,9 @@ from dgl.dataloading import GraphDataLoader
 from dgl.data import DGLDataset
 from dgl.nn import GraphConv
 
+import matplotlib.pyplot as plt
+import networkx as nx
+
 
 class SyntheticDataset(DGLDataset):
     """
@@ -26,7 +29,7 @@ class SyntheticDataset(DGLDataset):
 
     def process(self):
         """Process .csv files."""
-        edges = pd.read_csv('./data_set/edge_list.csv')
+        edges = pd.read_csv('./data_set/edge_list_coerrection.csv')
         properties = pd.read_csv('./data_set/properties.csv')
         self.graphs = []
         self.labels = []
@@ -76,15 +79,22 @@ class GCN(nn.Module):
     def __init__(self, in_feats, h_feats, num_classes):
         super(GCN, self).__init__()
         self.conv1 = GraphConv(in_feats, h_feats)
-        self.conv2 = GraphConv(h_feats, num_classes)
+        self.conv2 = GraphConv(h_feats, h_feats)
+        self.classify = nn.Linear(h_feats, num_classes)
 
-    def forward(self, graph, in_feat):
+    def forward(self, graph):
         """Compute graph convolution."""
-        h_l = self.conv1(graph, in_feat)
-        h_l = F.relu(h_l)
-        h_l = self.conv2(graph, h_l)
-        graph.ndata['h'] = h_l
-        return dgl.mean_nodes(graph, 'h')
+        # Use the node degree as the initial node feature. For undirected
+        # graphs, the in-degree is the same as the out-degree.
+        h = graph.in_degrees().view(-1, 1).float()
+        # Perform a graph convolution and activation function
+        h = F.relu(self.conv1(graph, h))
+        h = F.relu(self.conv2(graph, h))
+        graph.ndata['h'] = h
+        # Calculate graph representation by averaging all the node
+        # representations.
+        hg = dgl.mean_nodes(graph, 'h')
+        return self.classify(hg)
 
 
 if __name__ == '__main__':
@@ -102,16 +112,24 @@ if __name__ == '__main__':
                                        batch_size=5, drop_last=False)
     TEST_DATALOADER = GraphDataLoader(DATASET, sampler=TEST_SAMPLER,
                                       batch_size=5, drop_last=False)
-    MODEL = GCN(DATASET.dim_nfeats, 16, DATASET.gclasses)
+    MODEL = GCN(1, 256, 2)
+    LOSS_FUNC = nn.CrossEntropyLoss()
     OPTIMIZER = torch.optim.Adam(MODEL.parameters(), lr=0.01)
+    MODEL.train()
 
+    EPOCH_LOSSES = []
     for epoch in range(20):
-        for batched_graph, labels in TRAIN_DATALOADER:
-            pred = MODEL(batched_graph, batched_graph.ndata['attr'].float())
-            loss = F.cross_entropy(pred, labels)
+        EPOCH_LOSS = 0
+        for it, (bg, label) in enumerate(TRAIN_DATALOADER):
+            pred = MODEL(bg)
+            loss = LOSS_FUNC(pred, label)
             OPTIMIZER.zero_grad()
             loss.backward()
             OPTIMIZER.step()
+            EPOCH_LOSS += loss.detach().item()
+        EPOCH_LOSS /= (it+1)
+        print('Epoch {}, loss {:.4f}'.format(epoch, EPOCH_LOSS))
+        EPOCH_LOSSES.append(EPOCH_LOSS)
 
     NUM_CORRECT = 0
     NUM_TESTS = 0
