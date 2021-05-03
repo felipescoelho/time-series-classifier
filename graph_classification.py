@@ -6,6 +6,7 @@ apr 18, 2021
 """
 
 import pandas as pd
+import matplotlib.pyplot as plt
 import dgl
 import torch
 import torch.nn as nn
@@ -14,9 +15,13 @@ from torch.utils.data.sampler import SubsetRandomSampler
 from dgl.dataloading import GraphDataLoader
 from dgl.data import DGLDataset
 from dgl.nn import GraphConv
+from math import sqrt
 
-import matplotlib.pyplot as plt
-import networkx as nx
+plt.rcParams.update({
+    "text.usetex": True,
+    "font.family": "sans-serif",
+    "font.sans-serif": ["Helvetica"]
+})
 
 
 class SyntheticDataset(DGLDataset):
@@ -29,8 +34,62 @@ class SyntheticDataset(DGLDataset):
 
     def process(self):
         """Process .csv files."""
-        edges = pd.read_csv('./data_set/edge_list_coerrection.csv')
+        edges = pd.read_csv('./data_set/edge_list.csv')
         properties = pd.read_csv('./data_set/properties.csv')
+        self.graphs = []
+        self.labels = []
+
+        # Create a graph for each graph ID from the edges table.
+        # First process the properties table into two dictionaries with
+        # graph IDs as keys.
+        # The label and number of nodes are values.
+        label_dict = {}
+        num_nodes_dict = {}
+        for _, row in properties.iterrows():
+            label_dict[row['graph_id']] = row['label']
+            num_nodes_dict[row['graph_id']] = row['num_nodes']
+
+        # For the edges, first group the table by graph IDs.
+        edges_group = edges.groupby('graph_id')
+
+        # For each graph ID...
+        for graph_id in edges_group.groups:
+            # Find the edges as well as the number of nodes and its
+            # label.
+            edges_of_id = edges_group.get_group(graph_id)
+            src = edges_of_id['src'].to_numpy()
+            dst = edges_of_id['dst'].to_numpy()
+            num_nodes = num_nodes_dict[graph_id]
+            label = label_dict[graph_id]
+
+            # Create a graph and add it to the list of graphs and
+            # labels.
+            graph = dgl.graph((src, dst), num_nodes=num_nodes)
+            self.graphs.append(graph)
+            self.labels.append(label)
+
+        # Convert the label list to tenso for saving.
+        self.labels = torch.LongTensor(self.labels)
+
+    def __getitem__(self, i):
+        return self.graphs[i], self.labels[i]
+
+    def __len__(self):
+        return len(self.graphs)
+
+
+class SyntheticTestset(DGLDataset):
+    """
+    Synthetic dataset generated from my edge list and properties list.
+    """
+
+    def __init__(self):
+        super().__init__(name='synthetic')
+
+    def process(self):
+        """Process .csv files."""
+        edges = pd.read_csv('./data_set/edge_list_test.csv')
+        properties = pd.read_csv('./data_set/properties_test.csv')
         self.graphs = []
         self.labels = []
 
@@ -76,11 +135,14 @@ class SyntheticDataset(DGLDataset):
 class GCN(nn.Module):
     """Graph Convolutional Network model."""
 
-    def __init__(self, in_feats, h_feats, num_classes):
+    def __init__(self,
+                 in_feats,
+                 hidden_dim,
+                 num_classes):
         super(GCN, self).__init__()
-        self.conv1 = GraphConv(in_feats, h_feats)
-        self.conv2 = GraphConv(h_feats, h_feats)
-        self.classify = nn.Linear(h_feats, num_classes)
+        self.conv1 = GraphConv(in_feats, hidden_dim)
+        self.conv2 = GraphConv(hidden_dim, hidden_dim)
+        self.classify = nn.Linear(hidden_dim, num_classes)
 
     def forward(self, graph):
         """Compute graph convolution."""
@@ -98,29 +160,35 @@ class GCN(nn.Module):
 
 
 if __name__ == '__main__':
+    IMAGE_FOLDER = './images/'
     # Load the synthetic dataset:
-    DATASET = SyntheticDataset()
+    TRAINSET = SyntheticDataset()
+    TESTSET = SyntheticTestset()
 
     # Define data loader:
-    NUM_EXAMPLES = len(DATASET)
-    NUM_TRAIN = int(NUM_EXAMPLES * .8)
+    NUM_TRAIN = len(TRAINSET)
+    NUM_TEST = len(TESTSET)
 
     TRAIN_SAMPLER = SubsetRandomSampler(torch.arange(NUM_TRAIN))
-    TEST_SAMPLER = SubsetRandomSampler(torch.arange(NUM_TRAIN, NUM_EXAMPLES))
+    TEST_SAMPLER = SubsetRandomSampler(torch.arange(NUM_TEST))
 
-    TRAIN_DATALOADER = GraphDataLoader(DATASET, sampler=TRAIN_SAMPLER,
-                                       batch_size=5, drop_last=False)
-    TEST_DATALOADER = GraphDataLoader(DATASET, sampler=TEST_SAMPLER,
-                                      batch_size=5, drop_last=False)
-    MODEL = GCN(1, 256, 2)
+    TRAIN_DATALOADER = GraphDataLoader(TRAINSET, sampler=TRAIN_SAMPLER,
+                                       batch_size=13, drop_last=False)
+    TEST_DATALOADER = GraphDataLoader(TESTSET, sampler=TEST_SAMPLER,
+                                      batch_size=11, drop_last=False)
+
+    MODEL = GCN(1, 56, 2)
     LOSS_FUNC = nn.CrossEntropyLoss()
-    OPTIMIZER = torch.optim.Adam(MODEL.parameters(), lr=0.01)
+    OPTIMIZER = torch.optim.Adam(MODEL.parameters(), lr=0.001)
     MODEL.train()
 
     EPOCH_LOSSES = []
-    for epoch in range(20):
+    for epoch in range(1000):
         EPOCH_LOSS = 0
         for it, (bg, label) in enumerate(TRAIN_DATALOADER):
+            # import pdb
+            # pdb.set_trace()
+
             pred = MODEL(bg)
             loss = LOSS_FUNC(pred, label)
             OPTIMIZER.zero_grad()
@@ -131,10 +199,28 @@ if __name__ == '__main__':
         print('Epoch {}, loss {:.4f}'.format(epoch, EPOCH_LOSS))
         EPOCH_LOSSES.append(EPOCH_LOSS)
 
+    # Plot entropy
+    GOLDEN_RATIO = (1+sqrt(5))/2
+    WIDTH = 8.9
+    HEIGHT = WIDTH/GOLDEN_RATIO
+
+    FIG = plt.figure(figsize=(WIDTH, HEIGHT))
+    AX = FIG.add_subplot(111)
+    AX.plot(EPOCH_LOSSES, linewidth=2.5, color='#3783ff')
+    AX.tick_params(axis='both', labelsize=20)
+    AX.set_xlabel('Épocas', size=20)
+    AX.set_ylabel('Perda logaritmica', size=20)
+    AX.grid()
+    for axis in ['top', 'bottom', 'left', 'right']:
+        AX.spines[axis].set_linewidth(2)
+    FIG.tight_layout()
+    FIG.savefig(IMAGE_FOLDER+'avg_entropy.svg', format='svg',
+                bbox_inches='tight')
+
     NUM_CORRECT = 0
     NUM_TESTS = 0
     for batched_graph, labels in TEST_DATALOADER:
-        pred = MODEL(batched_graph, batched_graph.ndata['attr'].float())
+        pred = MODEL(batched_graph)
         NUM_CORRECT += (pred.argmax(1) == labels).sum().item()
         NUM_TESTS += len(labels)
 
